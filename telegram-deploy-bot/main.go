@@ -145,6 +145,8 @@ func buildApprove(jenkins, user, pass, jobName, buildID, inputID, action string)
 
 	jenkinsURL := fmt.Sprintf("%s/job/%s/%s/input/%s/%s", jenkins, jobName, buildID, inputID, action)
 
+	log.Printf("jenkins: %s", jenkinsURL)
+
 	v := url.Values{}
 	v.Set("name", "name")
 
