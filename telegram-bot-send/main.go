@@ -41,23 +41,24 @@ func main() {
 		os.Exit(4)
 	}
 
-	log.Printf("%s: authorized on account %s", me, bot.Self.UserName)
+	debug := os.Getenv("BOT_DEBUG") != ""
+	log.Printf("%s: BOT_DEBUG=%v", me, debug)
+	bot.Debug = debug
 
-	format := `Deploy request:
---
-Job: %s
-Build: %s
---
-To approve:
-  /aprovar_deploy_%s__%s
-To deny:
-  /rejeitar_deploy_%s__%s
-`
+	log.Printf("%s: authorized on account: %s", me, bot.Self.UserName)
 
-	text := fmt.Sprintf(format, job, build, job, build, job, build)
+	keyboard := tgbotapi.NewInlineKeyboardMarkup(
+		[]tgbotapi.InlineKeyboardButton{
+			tgbotapi.NewInlineKeyboardButtonData("aprovar", fmt.Sprintf("aprovar job %s build %s", job, build)),
+			tgbotapi.NewInlineKeyboardButtonData("negar", fmt.Sprintf("negar job %s build %s", job, build)),
+		},
+	)
+
+	text := fmt.Sprintf("Autorizar deploy job=%s build=%s ?", job, build)
 
 	msg := tgbotapi.NewMessage(chatID, text)
 
-	//bot.Debug = true
+	msg.ReplyMarkup = keyboard
+
 	bot.Send(msg)
 }
