@@ -7,11 +7,14 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/telegram-bot-api.v4"
 )
+
+var authorizedIDTable = map[int]struct{}{}
 
 func main() {
 
@@ -52,10 +55,27 @@ func main() {
 	}
 	log.Printf("%s: found env var BOT_JENKINS_INPUT_ID=%s", me, jenkinsInputID)
 
+	authorizedUserIDList := os.Getenv("BOT_AUTHORIZED_USER_ID_LIST")
+	if authorizedUserIDList == "" {
+		log.Printf("%s: missing env var BOT_AUTHORIZED_USER_ID_LIST", me)
+		os.Exit(6)
+	}
+	log.Printf("%s: found env var BOT_AUTHORIZED_USER_ID_LIST=%s", me, authorizedUserIDList)
+
+	for _, id := range strings.Split(authorizedUserIDList, ",") {
+		value, err := strconv.Atoi(id)
+		if err != nil {
+			log.Printf("bad authorized user ID: [%s]: %v", id, err)
+			os.Exit(7)
+		}
+		authorizedIDTable[value] = struct{}{}
+	}
+
+	log.Printf("%s: found env var BOT_JENKINS_INPUT_ID=%s", me, jenkinsInputID)
 	bot, errBot := tgbotapi.NewBotAPI(token)
 	if errBot != nil {
 		log.Printf("%s: failure creating bot client: %v", me, errBot)
-		os.Exit(6)
+		os.Exit(8)
 	}
 
 	debug := os.Getenv("BOT_DEBUG") != ""
@@ -70,7 +90,7 @@ func main() {
 	updates, errChan := bot.GetUpdatesChan(u)
 	if errChan != nil {
 		log.Printf("%s: could not get update channel: %v", me, errChan)
-		os.Exit(7)
+		os.Exit(9)
 	}
 
 	// Optional: wait for updates and clear them if you don't want to handle
@@ -86,7 +106,15 @@ func main() {
 		log.Printf("%s: message=%v callbackQuery=%v", me, update.Message, update.CallbackQuery)
 
 		if update.CallbackQuery != nil {
-			log.Printf("handling callback")
+			log.Printf("handling callback: update=%v", update)
+			log.Printf("handling callback: CallbackQuery=%v", *update.CallbackQuery)
+
+			if !authorizedApprover(update.CallbackQuery.From.ID) {
+				feedback := fmt.Sprintf("%s(%d) não tem permissão para autorizar", update.CallbackQuery.From.FirstName, update.CallbackQuery.From.ID)
+				msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, feedback)
+				bot.Send(msg)
+				continue
+			}
 
 			log.Printf("calling jenkins api")
 			var action string
@@ -96,15 +124,17 @@ func main() {
 				action = "abort"
 			}
 
+			var strApprove string
 			var errApprove error
 
 			parameters := strings.Fields(update.CallbackQuery.Data)
 			if len(parameters) < 5 {
-				errApprove = fmt.Errorf("bad short reponse: [%s]", update.CallbackQuery.Data)
+				errApprove = fmt.Errorf("bad short jenkins response: [%s]", update.CallbackQuery.Data)
 			} else {
 				jobName := parameters[2]
 				buildID := parameters[4]
-				errApprove = buildApprove(jenkinsURL, jenkinsAuthUser, jenkinsAuthPass, jobName, buildID, jenkinsInputID, action)
+				strApprove, errApprove = buildApprove(jenkinsURL, jenkinsAuthUser, jenkinsAuthPass, jobName, buildID, jenkinsInputID, action)
+				log.Printf("jenkins response: %v - %s", errApprove, strApprove)
 			}
 
 			log.Printf("answering callback (ack button)")
@@ -120,7 +150,7 @@ func main() {
 			log.Printf("sending feedback")
 			feedback := fmt.Sprintf("%s respondeu: %s", update.CallbackQuery.From.FirstName, update.CallbackQuery.Data)
 			if errApprove != nil {
-				feedback += fmt.Sprintf("- erro api jenkins: %v", errApprove)
+				feedback += fmt.Sprintf(" (erro api jenkins: %v - %s)", errApprove, strApprove)
 			}
 			log.Printf("feedback: %s", feedback)
 			msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, feedback)
@@ -141,7 +171,12 @@ func main() {
 	}
 }
 
-func buildApprove(jenkins, user, pass, jobName, buildID, inputID, action string) error {
+func authorizedApprover(ID int) bool {
+	_, found := authorizedIDTable[ID]
+	return found
+}
+
+func buildApprove(jenkins, user, pass, jobName, buildID, inputID, action string) (string, error) {
 
 	jenkinsURL := fmt.Sprintf("%s/job/%s/%s/input/%s/%s", jenkins, jobName, buildID, inputID, action)
 
@@ -152,7 +187,7 @@ func buildApprove(jenkins, user, pass, jobName, buildID, inputID, action string)
 
 	req, errNew := http.NewRequest("POST", jenkinsURL, strings.NewReader(v.Encode()))
 	if errNew != nil {
-		return errNew
+		return "", errNew
 	}
 
 	req.SetBasicAuth(user, pass)
@@ -161,16 +196,16 @@ func buildApprove(jenkins, user, pass, jobName, buildID, inputID, action string)
 
 	resp, errDel := client.Do(req)
 	if errDel != nil {
-		return errDel
+		return "", errDel
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("bad http post status: %d", resp.StatusCode)
+		return "", fmt.Errorf("bad http post status: %d", resp.StatusCode)
 	}
 
-	_, errRead := ioutil.ReadAll(resp.Body)
+	buf, errRead := ioutil.ReadAll(resp.Body)
 
-	return errRead
+	return string(buf), errRead
 }
