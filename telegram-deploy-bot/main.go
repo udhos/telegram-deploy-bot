@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -14,11 +15,15 @@ import (
 	"gopkg.in/telegram-bot-api.v4"
 )
 
+const version = "0.0"
+
 var authorizedIDTable = map[int]struct{}{}
 
 func main() {
 
 	me := os.Args[0]
+
+	log.Printf("%s: telegram bot version=%s runtime=%s GOMAXPROCS=%d", me, version, runtime.Version(), runtime.GOMAXPROCS(0))
 
 	token := os.Getenv("BOT_TOKEN")
 	if token == "" {
@@ -48,13 +53,6 @@ func main() {
 	}
 	log.Printf("%s: found env var BOT_JENKINS_PASS", me)
 
-	jenkinsInputID := os.Getenv("BOT_JENKINS_INPUT_ID")
-	if jenkinsInputID == "" {
-		log.Printf("%s: missing env var BOT_JENKINS_INPUT_ID", me)
-		os.Exit(5)
-	}
-	log.Printf("%s: found env var BOT_JENKINS_INPUT_ID=%s", me, jenkinsInputID)
-
 	authorizedUserIDList := os.Getenv("BOT_AUTHORIZED_USER_ID_LIST")
 	if authorizedUserIDList == "" {
 		log.Printf("%s: missing env var BOT_AUTHORIZED_USER_ID_LIST", me)
@@ -71,7 +69,6 @@ func main() {
 		authorizedIDTable[value] = struct{}{}
 	}
 
-	log.Printf("%s: found env var BOT_JENKINS_INPUT_ID=%s", me, jenkinsInputID)
 	bot, errBot := tgbotapi.NewBotAPI(token)
 	if errBot != nil {
 		log.Printf("%s: failure creating bot client: %v", me, errBot)
@@ -110,7 +107,7 @@ func main() {
 			log.Printf("handling callback: CallbackQuery=%v", *update.CallbackQuery)
 
 			if !authorizedApprover(update.CallbackQuery.From.ID) {
-				feedback := fmt.Sprintf("%s(%d) não tem permissão para autorizar", update.CallbackQuery.From.FirstName, update.CallbackQuery.From.ID)
+				feedback := fmt.Sprintf("%s(id=%d) não tem permissão para autorizar", update.CallbackQuery.From.FirstName, update.CallbackQuery.From.ID)
 				msg := tgbotapi.NewMessage(update.CallbackQuery.Message.Chat.ID, feedback)
 				bot.Send(msg)
 				continue
@@ -128,11 +125,12 @@ func main() {
 			var errApprove error
 
 			parameters := strings.Fields(update.CallbackQuery.Data)
-			if len(parameters) < 5 {
+			if len(parameters) < 7 {
 				errApprove = fmt.Errorf("bad short jenkins response: [%s]", update.CallbackQuery.Data)
 			} else {
 				jobName := parameters[2]
 				buildID := parameters[4]
+				jenkinsInputID := parameters[6]
 				strApprove, errApprove = buildApprove(jenkinsURL, jenkinsAuthUser, jenkinsAuthPass, jobName, buildID, jenkinsInputID, action)
 				log.Printf("jenkins response: %v - %s", errApprove, strApprove)
 			}

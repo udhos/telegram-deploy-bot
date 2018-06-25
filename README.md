@@ -10,7 +10,6 @@ Example:
     export BOT_JENKINS_URL=http://jenkinshost:8080
     export BOT_JENKINS_USER=admin
     export BOT_JENKINS_PASS=put_password_here
-    export BOT_JENKINS_INPUT_ID=put_pipeline_input_id_here
     export BOT_DEBUG=true
     export BOT_TOKEN=put_telegram_bot_token_here
     export BOT_AUTHORIZED_USER_ID_LIST=userId1,userId2,...,userIdN
@@ -26,4 +25,4 @@ Example:
 
     export BOT_TOKEN=put_telegram_bot_token_here
 
-    telegram-bot-send jenkins_job_name jenkins_build_id telegram_chat_id
+    telegram-bot-send jenkins_job_name jenkins_build_id jenkins_input_id telegram_chat_id
