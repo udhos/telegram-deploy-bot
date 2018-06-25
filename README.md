@@ -3,6 +3,8 @@
 telegram-deploy-bot
 ===================
 
+Service controlling the bot.
+
 Example:
 
     export BOT_JENKINS_URL=http://jenkinshost:8080
@@ -11,11 +13,14 @@ Example:
     export BOT_JENKINS_INPUT_ID=put_pipeline_input_id_here
     export BOT_DEBUG=true
     export BOT_TOKEN=put_telegram_bot_token_here
+    export BOT_AUTHORIZED_USER_ID_LIST=userId1,userId2,...,userIdN
     
     telegram-deploy-bot
 
 telegram-bot-send
 =================
+
+Send a message thru the bot.
 
 Example:
 
