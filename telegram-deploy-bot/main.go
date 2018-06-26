@@ -199,11 +199,13 @@ func buildApprove(jenkins, user, pass, jobName, buildID, inputID, action string)
 
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("bad http post status: %d", resp.StatusCode)
-	}
-
 	buf, errRead := ioutil.ReadAll(resp.Body)
 
-	return string(buf), errRead
+	strBuf := string(buf)
+
+	if resp.StatusCode != 200 {
+		return strBuf, fmt.Errorf("bad http post status: %d", resp.StatusCode)
+	}
+
+	return strBuf, errRead
 }
